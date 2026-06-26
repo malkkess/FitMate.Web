@@ -1,0 +1,41 @@
+[
+  {
+    "Name": "Butter",
+    "Cost": 4.7775,
+    "Calories": 7.17,
+    "SaturatedFats": 0.50489,
+    "Category": "fat",
+    "PortionLimitMax": 30,
+    "HasLactose": 1,
+    "HasNuts": 0,
+    "HasGluten": 0,
+    "Fiber": 0,
+    "PortionLimitMin": 10
+  },
+  {
+    "Name": "Olive Oil",
+    "Cost": 5.495,
+    "Calories": 8.84,
+    "SaturatedFats": 0.13808,
+    "Category": "fat",
+    "PortionLimitMax": 30,
+    "HasLactose": 0,
+    "HasNuts": 0,
+    "HasGluten": 0,
+    "Fiber": 0,
+    "PortionLimitMin": 10
+  },
+  {
+    "Name": "Sunflower Linoleic 65%",
+    "Cost": 0.945,
+    "Calories": 8.84,
+    "SaturatedFats": 0.103,
+    "Category": "fat",
+    "PortionLimitMax": 30,
+    "HasLactose": 0,
+    "HasNuts": 0,
+    "HasGluten": 0,
+    "Fiber": 0,
+    "PortionLimitMin": 10
+  }
+]
