@@ -94,5 +94,55 @@ namespace Service
             if (health.HasHeartDisease) list.Add("heart_disease");
             return list;
         }
+
+        public static void ApplyHealthProfile(HealthProfile health, UpdateUserProfileDto updateDto)
+        {
+            var allergies = updateDto.Allergies
+                .Select(a => a.Trim().ToLowerInvariant())
+                .ToHashSet();
+
+            var conditions = updateDto.MedicalConditions
+                .Select(c => c.Trim().ToLowerInvariant())
+                .ToHashSet();
+
+            health.IsLactoseIntolerant = allergies.Contains("lactose");
+            health.IsGlutenAllergic = allergies.Contains("gluten");
+            health.IsNutsAllergic = allergies.Contains("nuts");
+            health.OtherAllergies = updateDto.OtherAllergies;
+            health.DiabetesStatus = updateDto.DiabetesStatus;
+            health.HasHypertension = conditions.Contains("hypertension");
+            health.HasHeartDisease = conditions.Contains("heart_disease");
+            health.UpdatedAt = DateTime.UtcNow;
+        }
+
+        public static void ApplyHealthProfile(HealthProfile health, RegisterRequestDto request)
+        {
+            ApplyHealthProfile(health, new UpdateUserProfileDto
+            {
+                DiabetesStatus = request.DiabetesStatus,
+                Allergies = request.Allergies,
+                MedicalConditions = request.MedicalConditions,
+                OtherAllergies = request.OtherAllergies,
+            });
+        }
+
+        public static UserProfileDto MapToProfileDto(User user, HealthProfile? health)
+        {
+            return new UserProfileDto
+            {
+                Id = user.Id,
+                FullName = user.FullName,
+                Email = user.Email,
+                Age = user.Age,
+                Height = user.Height,
+                Weight = user.CurrentWeight,
+                Gender = user.Gender,
+                ActivityLevel = user.ActivityLevel,
+                Goal = user.Goal,
+                DiabetesStatus = health?.DiabetesStatus ?? DiabetesStatus.None,
+                Allergies = BuildAllergiesList(health),
+                MedicalConditions = BuildMedicalConditionsList(health),
+            };
+        }
     }
 }

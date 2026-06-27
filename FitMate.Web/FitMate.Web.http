@@ -1,6 +1,58 @@
 @FitMate.Web_HostAddress = http://localhost:5131
+@token = {{login.response.body.token}}
 
-GET {{FitMate.Web_HostAddress}}/weatherforecast/
-Accept: application/json
+### Register
+POST {{FitMate.Web_HostAddress}}/api/auth/register
+Content-Type: application/json
 
-###
+{
+  "fullName": "Ahmed Hassan",
+  "email": "ahmed@example.com",
+  "password": "Password123",
+  "age": 28,
+  "height": 175,
+  "weight": 82,
+  "gender": 2,
+  "activityLevel": 3,
+  "goal": 1,
+  "diabetesStatus": 2,
+  "allergies": ["lactose", "nuts"],
+  "medicalConditions": ["hypertension"],
+  "otherAllergies": "shellfish"
+}
+
+### Login
+# @name login
+POST {{FitMate.Web_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "ahmed@example.com",
+  "password": "Password123"
+}
+
+### Current user profile
+GET {{FitMate.Web_HostAddress}}/api/auth/me
+Authorization: Bearer {{token}}
+
+### Forgot password (sends 6-digit code to email)
+POST {{FitMate.Web_HostAddress}}/api/auth/forgot-password
+Content-Type: application/json
+
+{
+  "email": "ahmed@example.com"
+}
+
+### Reset password with verification code
+POST {{FitMate.Web_HostAddress}}/api/auth/reset-password
+Content-Type: application/json
+
+{
+  "email": "ahmed@example.com",
+  "code": "123456",
+  "newPassword": "NewPassword123"
+}
+
+### Generate meal plan (requires auth)
+POST {{FitMate.Web_HostAddress}}/api/users/1/meal-plans/generate
+Authorization: Bearer {{token}}

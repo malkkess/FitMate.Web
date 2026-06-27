@@ -29,6 +29,7 @@ namespace Presistence.Data
         public DbSet<MonthlyWeightLog> MonthlyWeightLogs { get; set; }
         public DbSet<MealAdherenceLog> MealAdherenceLogs { get; set; }
         public DbSet<MealAdherenceItem> MealAdherenceItems { get; set; }
+        public DbSet<PasswordResetCode> PasswordResetCodes { get; set; }
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             

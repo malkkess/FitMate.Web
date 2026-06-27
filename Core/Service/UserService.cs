@@ -44,7 +44,7 @@ namespace Service
             _uow.GetRepository<HealthProfile, int>().Update(health);
             await _uow.SaveChangesAsync();
 
-            return MapToProfileDto(user, health);
+            return HealthProfileMapper.MapToProfileDto(user, health);
         }
 
         private async Task<User> GetUserOrThrowAsync(int userId)
@@ -59,69 +59,10 @@ namespace Service
             return profiles.FirstOrDefault(h => h.UserId == userId);
         }
 
-        private static UserProfileDto MapToProfileDto(User user, HealthProfile? health)
-        {
-            return new UserProfileDto
-            {
-                Id = user.Id,
-                FullName = user.FullName,
-                Email = user.Email,
-                Age = user.Age,
-                Height = user.Height,
-                Weight = user.CurrentWeight,
-                Gender = user.Gender,
-                ActivityLevel = user.ActivityLevel,
-                Goal = user.Goal,
-                DiabetesStatus = health?.DiabetesStatus ?? DiabetesStatus.None,
-                Allergies = BuildAllergiesList(health),
-                MedicalConditions = BuildMedicalConditionsList(health),
-            };
-        }
+        private static UserProfileDto MapToProfileDto(User user, HealthProfile? health) =>
+            HealthProfileMapper.MapToProfileDto(user, health);
 
-        private static void ApplyHealthProfile(HealthProfile health, UpdateUserProfileDto updateDto)
-        {
-            var allergies = updateDto.Allergies
-                .Select(a => a.Trim().ToLowerInvariant())
-                .ToHashSet();
-
-            var conditions = updateDto.MedicalConditions
-                .Select(c => c.Trim().ToLowerInvariant())
-                .ToHashSet();
-
-            health.IsLactoseIntolerant = allergies.Contains("lactose");
-            health.IsGlutenAllergic = allergies.Contains("gluten");
-            health.IsNutsAllergic = allergies.Contains("nuts");
-            health.OtherAllergies = updateDto.OtherAllergies;
-            health.DiabetesStatus = updateDto.DiabetesStatus;
-
-            health.HasHypertension = conditions.Contains("hypertension");
-            health.HasHeartDisease = conditions.Contains("heart_disease");
-            health.UpdatedAt = DateTime.UtcNow;
-        }
-
-        private static List<string> BuildAllergiesList(HealthProfile? health)
-        {
-            var list = new List<string>();
-            if (health is null) return list;
-            if (health.IsLactoseIntolerant) list.Add("lactose");
-            if (health.IsGlutenAllergic) list.Add("gluten");
-            if (health.IsNutsAllergic) list.Add("nuts");
-            if (!string.IsNullOrWhiteSpace(health.OtherAllergies))
-            {
-                list.AddRange(health.OtherAllergies
-                    .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
-            }
-            return list;
-        }
-
-        private static List<string> BuildMedicalConditionsList(HealthProfile? health)
-        {
-            var list = new List<string>();
-            if (health is null) return list;
-            if (health.DiabetesStatus != DiabetesStatus.None) list.Add("diabetes");
-            if (health.HasHypertension) list.Add("hypertension");
-            if (health.HasHeartDisease) list.Add("heart_disease");
-            return list;
-        }
+        private static void ApplyHealthProfile(HealthProfile health, UpdateUserProfileDto updateDto) =>
+            HealthProfileMapper.ApplyHealthProfile(health, updateDto);
     }
 }

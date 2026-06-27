@@ -6,6 +6,7 @@ namespace Service
     {
         public ServiceManager(
             IUserService userService,
+            IAuthService authService,
             IDailyLogService dailyLogService,
             IHealthProfileService healthProfileService,
             IMealPlanService mealPlanService,
@@ -13,6 +14,7 @@ namespace Service
             IPythonLinker pythonLinker)
         {
             UserService = userService;
+            AuthService = authService;
             DailyLogService = dailyLogService;
             HealthProfileService = healthProfileService;
             MealPlanService = mealPlanService;
@@ -21,6 +23,7 @@ namespace Service
         }
 
         public IUserService UserService { get; }
+        public IAuthService AuthService { get; }
         public IDailyLogService DailyLogService { get; }
         public IHealthProfileService HealthProfileService { get; }
         public IMealPlanService MealPlanService { get; }
