@@ -9,6 +9,7 @@ namespace ServiceAbstraction
     public interface IServiceManager
     {
         public IUserService UserService { get; }
+        public IAuthService AuthService { get; }
         public IDailyLogService DailyLogService { get; }
         public IHealthProfileService HealthProfileService { get; }
         public IMealPlanService MealPlanService { get; }

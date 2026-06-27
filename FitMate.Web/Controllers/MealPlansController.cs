@@ -1,10 +1,14 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using FitMate.Web.Filters;
 using ServiceAbstraction;
 using Shared.DataTransferObject;
 
 namespace FitMate.Web.Controllers
 {
     [ApiController]
+    [Authorize]
+    [EnsureUserMatch]
     [Route("api/users/{userId:int}/meal-plans")]
     public class MealPlansController : ControllerBase
     {
