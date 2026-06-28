@@ -14,6 +14,7 @@ namespace Shared.DataTransferObject
         public double TotalDayProtein { get; set; }
         public double TotalDayCarbs { get; set; }
         public double TotalDayFats { get; set; }
+        public PythonAnalysisDto? Analysis { get; set; }
 
         public List<MealDto> Meals { get; set; } = new();
     }

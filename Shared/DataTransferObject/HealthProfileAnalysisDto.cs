@@ -11,6 +11,7 @@ namespace Shared.DataTransferObject
         public string ActivityLevel { get; set; } = string.Empty;
         public string Goal { get; set; } = string.Empty;
         public DiabetesStatus DiabetesStatus { get; set; } = DiabetesStatus.None;
+        public string HypertensionStatus { get; set; } = "none";
         public List<string> Allergies { get; set; } = new();
         public List<string> MedicalConditions { get; set; } = new();
     }

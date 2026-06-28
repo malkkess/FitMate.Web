@@ -30,6 +30,7 @@ namespace Presistence.Data
         public DbSet<MealAdherenceLog> MealAdherenceLogs { get; set; }
         public DbSet<MealAdherenceItem> MealAdherenceItems { get; set; }
         public DbSet<PasswordResetCode> PasswordResetCodes { get; set; }
+        public DbSet<UserOptimizerState> UserOptimizerStates { get; set; }
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             

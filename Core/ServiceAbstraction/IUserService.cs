@@ -6,5 +6,6 @@ namespace ServiceAbstraction
     {
         Task<UserProfileDto> GetProfileAsync(int userId);
         Task<UserProfileDto> UpdateProfileAsync(int userId, UpdateUserProfileDto updateDto);
+        Task<UserProfileDto> PatchProfileAsync(int userId, PartialUpdateUserProfileDto updateDto);
     }
 }

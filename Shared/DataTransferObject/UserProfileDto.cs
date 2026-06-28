@@ -21,6 +21,7 @@ namespace Shared.DataTransferObject
         public Goal Goal { get; set; }
 
         public DiabetesStatus DiabetesStatus { get; set; } = DiabetesStatus.None;
+        public bool HasCardiovascularMode { get; set; }
         public List<string> MedicalConditions { get; set; } = new();
         public List<string> Allergies { get; set; } = new();
     }

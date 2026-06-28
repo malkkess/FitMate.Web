@@ -22,5 +22,11 @@ namespace DomainLayer.Models
         public double Protein { get; set; }
         public double Fats { get; set; }
         public double Carbs { get; set; }
+
+        public int? SlotIndex { get; set; }
+        public string Category { get; set; } = string.Empty;
+        public string FoodFamily { get; set; } = string.Empty;
+        public double NetCarbs { get; set; }
+        public double SaturatedFats { get; set; }
     }
 }
