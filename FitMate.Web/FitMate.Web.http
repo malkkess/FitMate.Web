@@ -15,7 +15,7 @@ Content-Type: application/json
   "gender": 2,
   "activityLevel": 3,
   "goal": 1,
-  "diabetesStatus": 2,
+  "diabetesStatus": "type2",
   "allergies": ["lactose", "nuts"],
   "medicalConditions": ["hypertension"],
   "otherAllergies": "shellfish"

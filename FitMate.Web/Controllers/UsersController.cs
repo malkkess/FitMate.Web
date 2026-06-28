@@ -34,5 +34,14 @@ namespace FitMate.Web.Controllers
             var profile = await _userService.UpdateProfileAsync(userId, updateDto);
             return Ok(profile);
         }
+
+        [HttpPatch("{userId:int}")]
+        public async Task<ActionResult<UserProfileDto>> PatchProfile(
+            int userId,
+            [FromBody] PartialUpdateUserProfileDto updateDto)
+        {
+            var profile = await _userService.PatchProfileAsync(userId, updateDto);
+            return Ok(profile);
+        }
     }
 }

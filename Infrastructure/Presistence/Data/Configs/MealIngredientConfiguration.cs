@@ -18,6 +18,8 @@ namespace Presistence.Data.Configs
             builder.HasIndex(mi => new { mi.MealId, mi.FoodItemId }).IsUnique();
 
             builder.Property(mi => mi.Quantity).HasPrecision(18, 2);
+            builder.Property(mi => mi.Category).HasMaxLength(10);
+            builder.Property(mi => mi.FoodFamily).HasMaxLength(50);
 
             builder.HasOne(mi => mi.Meal)
                    .WithMany(m => m.Ingredients)
