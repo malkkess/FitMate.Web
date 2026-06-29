@@ -18,10 +18,20 @@ namespace FitMate.Web.Controllers
                     Option("prediabetic", "Prediabetic"),
                     Option("type2", "Type 2 Diabetes"),
                 },
-                MedicalConditions = new List<LookupOptionDto>
+                MedicalConditions = new List<MedicalConditionOptionDto>
                 {
-                    Option("hypertension", "Hypertension"),
-                    Option("heart_disease", "Heart Disease"),
+                    MedicalCondition(
+                        "diabetesStatus",
+                        "Diabetes",
+                        "select",
+                        new List<LookupOptionDto>
+                        {
+                            Option("none", "None"),
+                            Option("prediabetic", "Prediabetic"),
+                            Option("type2", "Type 2 Diabetes"),
+                        }),
+                    MedicalCondition("hypertension", "Hypertension", "checkbox"),
+                    MedicalCondition("heart_disease", "Heart Disease", "checkbox"),
                 },
                 Allergies = new List<LookupOptionDto>
                 {
@@ -58,6 +68,21 @@ namespace FitMate.Web.Controllers
                 Value = value,
                 Label = label,
                 OptimizerValue = optimizerValue,
+            };
+        }
+
+        private static MedicalConditionOptionDto MedicalCondition(
+            string value,
+            string label,
+            string inputType,
+            List<LookupOptionDto>? options = null)
+        {
+            return new MedicalConditionOptionDto
+            {
+                Value = value,
+                Label = label,
+                InputType = inputType,
+                Options = options ?? new List<LookupOptionDto>(),
             };
         }
     }
