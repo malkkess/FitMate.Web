@@ -9,6 +9,8 @@ namespace Service
 {
     public class MealPlanService : IMealPlanService
     {
+        private const int GeneratedPlanDays = 7;
+
         private readonly IUnitOfWork _uow;
         private readonly IPythonLinker _pythonLinker;
         private readonly IDailyLogService _dailyLogService;
@@ -45,7 +47,7 @@ namespace Service
             var request = HealthProfileMapper.MapToPythonRequest(
                 user,
                 health,
-                days: 1,
+                days: GeneratedPlanDays,
                 adherence: adherence,
                 masterSeed: masterSeed,
                 dayNumber: dayNumber,
@@ -60,12 +62,6 @@ namespace Service
                 .GroupBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
-            var mealPlan = new MealPlan
-            {
-                UserId = userId,
-                Date = DateTime.Today,
-            };
-
             var mealTypeMap = new Dictionary<string, MealType>(StringComparer.OrdinalIgnoreCase)
             {
                 ["Breakfast"] = MealType.Breakfast,
@@ -74,41 +70,84 @@ namespace Service
                 ["Snack"] = MealType.Snack,
             };
 
-            foreach (var (mealName, items) in pythonResult.Plan)
+            var generatedPlans = ResolveGeneratedPlans(pythonResult, dayNumber);
+            if (generatedPlans.Count == 0)
+                return null;
+
+            var savedPlans = new List<(MealPlan Plan, Dictionary<string, List<PythonMealItemDto>> PythonPlan)>();
+            var today = DateTime.Today;
+
+            foreach (var generatedPlan in generatedPlans)
             {
-                if (!mealTypeMap.TryGetValue(mealName, out var mealType)) continue;
-
-                var meal = new Meal { Type = mealType };
-
-                foreach (var item in items)
+                var pythonPlan = generatedPlan.Plan;
+                var offset = Math.Max(0, generatedPlan.DayNumber - dayNumber);
+                var mealPlan = new MealPlan
                 {
-                    if (!foodsByName.TryGetValue(item.Food, out var foodItem))
-                        continue;
+                    UserId = userId,
+                    Date = today.AddDays(offset),
+                    TotalCalories = pythonPlan.Values.SelectMany(i => i).Sum(i => i.Calories),
+                };
 
-                    meal.Ingredients.Add(new MealIngredient
+                foreach (var (mealName, items) in pythonPlan)
+                {
+                    if (!mealTypeMap.TryGetValue(mealName, out var mealType)) continue;
+
+                    var meal = new Meal { Type = mealType };
+
+                    foreach (var item in items)
                     {
-                        FoodItemId = foodItem.Id,
-                        Quantity = item.Grams,
-                        Calories = item.Calories,
-                        Protein = item.Protein,
-                        Fats = item.Fat,
-                        Carbs = item.Carbs,
-                        NetCarbs = item.NetCarbs,
-                        SaturatedFats = item.SatFat,
-                        SlotIndex = item.Slot,
-                        Category = string.IsNullOrWhiteSpace(item.Category) ? foodItem.Category : item.Category,
-                        FoodFamily = string.IsNullOrWhiteSpace(item.FoodFamily) ? foodItem.FoodFamily : item.FoodFamily,
-                    });
+                        if (!foodsByName.TryGetValue(item.Food, out var foodItem))
+                            continue;
+
+                        meal.Ingredients.Add(new MealIngredient
+                        {
+                            FoodItemId = foodItem.Id,
+                            Quantity = item.Grams,
+                            Calories = item.Calories,
+                            Protein = item.Protein,
+                            Fats = item.Fat,
+                            Carbs = item.Carbs,
+                            NetCarbs = item.NetCarbs,
+                            SaturatedFats = item.SatFat,
+                            SlotIndex = item.Slot,
+                            Category = string.IsNullOrWhiteSpace(item.Category) ? foodItem.Category : item.Category,
+                            FoodFamily = string.IsNullOrWhiteSpace(item.FoodFamily) ? foodItem.FoodFamily : item.FoodFamily,
+                        });
+                    }
+
+                    mealPlan.Meals.Add(meal);
                 }
 
-                mealPlan.Meals.Add(meal);
+                await _uow.GetRepository<MealPlan, int>().AddAsync(mealPlan);
+                savedPlans.Add((mealPlan, pythonPlan));
             }
 
-            await _uow.GetRepository<MealPlan, int>().AddAsync(mealPlan);
-            await UpsertOptimizerStateAsync(userId, optimizerState, masterSeed, dayNumber);
+            var lastGeneratedDay = generatedPlans.Max(p => p.DayNumber);
+            await UpsertOptimizerStateAsync(userId, optimizerState, masterSeed, lastGeneratedDay);
             await _uow.SaveChangesAsync();
 
-            return MapToDto(mealPlan, pythonResult.Plan, pythonResult.Analysis);
+            var firstPlan = savedPlans.First();
+            return MapToDto(firstPlan.Plan, firstPlan.PythonPlan, pythonResult.Analysis);
+        }
+
+        private static List<(int DayNumber, Dictionary<string, List<PythonMealItemDto>> Plan)> ResolveGeneratedPlans(
+            PythonOutputDto pythonResult,
+            int fallbackDayNumber)
+        {
+            var plans = pythonResult.Plans
+                .Where(p => p.Success && p.Plan is not null)
+                .Select(p => (p.DayNumber, p.Plan!))
+                .ToList();
+
+            if (plans.Count > 0)
+                return plans;
+
+            return pythonResult.Plan.Count == 0
+                ? new List<(int DayNumber, Dictionary<string, List<PythonMealItemDto>> Plan)>()
+                : new List<(int DayNumber, Dictionary<string, List<PythonMealItemDto>> Plan)>
+                {
+                    (fallbackDayNumber, pythonResult.Plan),
+                };
         }
 
         private async Task UpsertOptimizerStateAsync(
