@@ -15,5 +15,6 @@ namespace Shared.DataTransferObject
         public List<string> RelaxedConstraints { get; set; } = new();
         public PythonAnalysisDto? Analysis { get; set; }
         public Dictionary<string, List<PythonMealItemDto>> Plan { get; set; } = new();
+        public List<PythonDayPlanDto> Plans { get; set; } = new();
     }
 }

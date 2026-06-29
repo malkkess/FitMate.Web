@@ -112,18 +112,18 @@ MEAL_CAL_FRAC = {
     "Dinner":    0.28,
     "Snack":     0.12,
 }
-MEAL_CAL_TOL    = 0.25   # ±25 % per-meal calorie tolerance (τ)
+MEAL_CAL_TOL    = 0.15   # FIX-3: tightened ±15 % per-meal calorie band (was ±25 %) — reduces breakfast underdelivery and lunch/dinner overflow
 NETCARB_MEAL_TOL = 0.30  # +30 % per-meal NC tolerance    (ε_NC)
 
 GP_WEIGHTS_BY_GOAL = {
-    "lose":     {"cost": 0.5, "cal": 3.0},
-    "maintain": {"cost": 0.5, "cal": 3.0},
-    "gain":     {"cost": 0.5, "cal": 3.0},
+    "lose":     {"cost": 0.5},
+    "maintain": {"cost": 0.5},
+    "gain":     {"cost": 0.5},
 }
 
 # §2.3  Diabetes / W_diab / W_health  (see §4 note on w_health)
 DIABETES_PARAMS = {
-    "none":       {"nc_max_day": None, "w_diab": 0.3,  "w_health": 0.0},
+    "none":       {"nc_max_day": None, "w_diab": 0.0,  "w_health": 0.0},  # FIX-1: was 0.3 — healthy users must not have net-carb minimization
     "prediabetic":{"nc_max_day": 150,  "w_diab": 2.0,  "w_health": 1.0},
     "type2":      {"nc_max_day": 130,  "w_diab": 5.0,  "w_health": 1.0},
 }
@@ -140,13 +140,11 @@ HYPERTENSION_PARAMS = {
     "cardiovascular": {"w_health": 1.0},
 }
 
-NUTRITION_TOL = {
-    "protein_lo": 0.95,
-    "fiber_lo":   0.95,
-    "fat_hi":     1.00,   # FIX-1: no soft tolerance — _trim_for already handles rounding
-    "carbs_hi":   1.00,   # FIX-1: same; hard ceiling must be hard in plan_violates too
-    "fiber_hi":   1.00,   # FIX-1: fiber ceiling must not silently exceed 2× AI
-}
+# ── FIX-2: Single shared rounding tolerance used by BOTH the LP post-processor
+# and plan_violates() so validation and optimization never disagree.
+# 1 % covers the maximum error from rounding grams to the nearest 5g.
+# (5g trim on a 100g item with 0.3 g/g fat = 1.5g fat error < 1% of 150g ceiling)
+ROUNDING_TOL = 0.01   # 1 % — applied uniformly to all macro ceiling checks
 
 MACRO_SPLITS = {
     "lose":     (0.25, 0.40),
@@ -470,19 +468,12 @@ class UserBiometrics:
 
 def _compute_reference_values(user, foods, triples):
     """
-    Compute R_cost, R_cal, R_SF, R_NC — §2.4 Reference-Value Normalization.
+    Compute R_cost, R_SF, R_NC — §2.4 Reference-Value Normalization.
+    R_cal removed: calorie target is now enforced via hard C11 ±3% band.
 
     R_cost  = Σ_{m,s} max_{j ∈ J_{m,s}} Cost_j × Portion_max_{m,s}
-              Upper-bound on daily food cost (most expensive food in every slot).
-
-    R_cal   = E^u_req  (daily calorie target)
-              Calorie deviation normalizer: if you ate nothing, d⁻ = E^u_req = 100 %.
-
-    R_SF    = 0.10 × E^u_req / 9  (grams)
-              WHO/AHA: ≤ 10 % of energy from saturated fat.
-
-    R_NC    = NC^u_max   if σ(u) ≠ none   (diabetes carb ceiling)
-            = Carb^u_max  if σ(u) = none   (general carb ceiling)
+    R_SF    = 0.10 × E^u_req / 9  (grams) — WHO/AHA SatFat limit
+    R_NC    = NC^u_max if diabetic, else Carb^u_max
     """
     # R_cost: sum over every (meal, slot) of [max cost food × that slot's Portion_max]
     r_cost = 0.0
@@ -503,9 +494,6 @@ def _compute_reference_values(user, foods, triples):
     # Safety guard: avoid division by zero if foods table has zero costs
     r_cost = max(r_cost, 1.0)
 
-    # R_cal = E^u_req
-    r_cal = max(user.cal_target, 1.0)
-
     # R_SF = 10 % of energy ÷ 9 kcal/g  →  grams of saturated fat
     r_sf = max(0.10 * user.cal_target / 9.0, 1.0)
 
@@ -516,18 +504,18 @@ def _compute_reference_values(user, foods, triples):
         r_nc = float(user.carbs_target)
     r_nc = max(r_nc, 1.0)
 
-    return r_cost, r_cal, r_sf, r_nc
+    return r_cost, r_sf, r_nc
 
 
 def solve_one_day(user, foods, triples, day_label="", seed=None, perturb_cost=True):
     """
     Build and solve the MILP for one day using the v5 normalized objective.
 
-    Objective (§4 — Normalized):
+    Objective (§4 — Normalized, calorie term removed — enforced by hard C11 ±3% band):
         min Z = W_cost  × (Σ Cost_j·x  / R_cost)
-              + W_cal   × ((d⁺+d⁻)     / R_cal)
               + W_health× (Σ SatFat_j·x / R_SF)
               + W_diab  × (Σ NetCarb_j·x/ R_NC)
+              + proximity penalties on protein, fat, carb usage
 
     C20 has already been applied in build_slot_triples (δ controls which triples exist).
     C21 has already been applied in build_slot_triples (H_{m,s,d} filters the eligible set).
@@ -557,12 +545,8 @@ def solve_one_day(user, foods, triples, day_label="", seed=None, perturb_cost=Tr
         x[k] = pulp.LpVariable(f"x_{j}_{meal}_{s_idx}", lowBound=0, upBound=float(mx))
         y[k] = pulp.LpVariable(f"y_{j}_{meal}_{s_idx}", cat="Binary")
 
-    # Goal-programming deviation variables (§3)
-    d_cal_p = pulp.LpVariable("d_cal_p", lowBound=0)
-    d_cal_m = pulp.LpVariable("d_cal_m", lowBound=0)
-
     # ── §2.4 — Compute normalization reference values ─────────────────────────
-    R_cost, R_cal, R_SF, R_NC = _compute_reference_values(user, foods, triples)
+    R_cost, R_SF, R_NC = _compute_reference_values(user, foods, triples)
     # ─────────────────────────────────────────────────────────────────────────
 
     # Objective term helpers
@@ -573,9 +557,6 @@ def solve_one_day(user, foods, triples, day_label="", seed=None, perturb_cost=Tr
         perturbed_cost.get(j, float(foods.loc[j, "cost"])) * x[j, m, si]
         for j, m, si, *_ in triples
     )
-
-    # f₂ / R_cal   — calorie deviation fraction of daily calorie target
-    f2_cal = d_cal_p + d_cal_m
 
     # f₃ / R_SF    — saturated fat fraction of WHO/AHA SatFat limit
     f3_satfat = pulp.lpSum(
@@ -589,12 +570,31 @@ def solve_one_day(user, foods, triples, day_label="", seed=None, perturb_cost=Tr
         for j, m, si, *_ in triples
     )
 
-    # ── §4 — Normalized objective function ────────────────────────────────────
+    # ── FIX-4: Macro proximity penalty terms ──────────────────────────────────
+    # Penalizes proximity to macro ceilings to reduce constraint saturation.
+    # Weights are small so they act as tie-breakers only — the hard calorie
+    # band (C11) guarantees calorie delivery regardless of these penalties.
+    R_prot_obj  = max(user.protein_max,   1.0)
+    R_fat_obj   = max(user.fat_target,    1.0)
+    R_carb_obj  = max(user.carbs_target,  1.0)
+
+    f_prot_use  = pulp.lpSum(foods.loc[j, "prot"]  * x[j, m, si] for j, m, si, *_ in triples)
+    f_fat_use   = pulp.lpSum(foods.loc[j, "fat"]   * x[j, m, si] for j, m, si, *_ in triples)
+    f_carb_use  = pulp.lpSum(foods.loc[j, "carbs"] * x[j, m, si] for j, m, si, *_ in triples)
+
+    W_PROT_PROX = 0.4
+    W_FAT_PROX  = 0.3
+    W_CARB_PROX = 0.3
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # ── §4 — Normalized objective (calorie term removed — enforced by hard C11 band)
     prob += (
-        W["cost"]       * (f1_cost    / R_cost)   # dimensionless cost term
-        + W["cal"]      * (f2_cal     / R_cal)    # dimensionless calorie-deviation term
-        + user.w_health * (f3_satfat  / R_SF)     # sat-fat term (diabetes OR cardiovascular)
-        + user.w_diab   * (f4_netcarb / R_NC)     # net-carb term (diabetes only)
+        W["cost"]        * (f1_cost    / R_cost)          # dimensionless cost term
+        + user.w_health  * (f3_satfat  / R_SF)            # sat-fat term (diabetes OR cardiovascular)
+        + user.w_diab    * (f4_netcarb / R_NC)            # net-carb term (diabetes only; 0 for healthy)
+        + W_PROT_PROX    * (f_prot_use / R_prot_obj)      # proximity penalty — protein
+        + W_FAT_PROX     * (f_fat_use  / R_fat_obj)       # proximity penalty — fat
+        + W_CARB_PROX    * (f_carb_use / R_carb_obj)      # proximity penalty — carbs
     ), "Obj_Normalized"
     # ─────────────────────────────────────────────────────────────────────────
 
@@ -607,8 +607,13 @@ def solve_one_day(user, foods, triples, day_label="", seed=None, perturb_cost=Tr
         return pulp.lpSum(foods.loc[j, nut] * x[j, m, si]
                           for j, m, si, *_ in triples if m == meal_name)
 
-    # ── C11 — Calorie Goal Programming equation (§5.4) ───────────────────────
-    prob += sum_all("cal") + d_cal_m - d_cal_p == user.cal_target, "C11_GP_cal"
+    # ── C11 — Hard daily calorie band ±3 % ───────────────────────────────────
+    # Replaces the GP soft equality. ±3 % = ±~110 kcal at 3692 kcal target,
+    # which absorbs gram-rounding without allowing large underdelivery.
+    # The proximity penalty terms in the objective cannot push calories below
+    # this floor because C11_lo is a hard constraint the solver must satisfy.
+    prob += sum_all("cal") >= user.cal_target * 0.97, "C11_cal_lo"
+    prob += sum_all("cal") <= user.cal_target * 1.03, "C11_cal_hi"
 
     # ── C7–C10 — Hard macro constraints (§5.3) + upper bounds ───────────────
     prob += sum_all("prot")  >= user.protein_target, "C7_prot_min"
@@ -783,6 +788,54 @@ def solve_one_day(user, foods, triples, day_label="", seed=None, perturb_cost=Tr
     _trim_for(plan, "fiber", user.fiber_max,    foods)
     if user.nc_max_day is not None:
         _trim_for(plan, "net_carbs", user.nc_max_day, foods)
+
+    # ── Calorie boost: push rounded plan back up to the ±3 % floor ───────────
+    # The LP guarantees calories ≥ cal_target × 0.97 at the continuous level,
+    # but rounding every food to the nearest 5g can drop totals by 50–200 kcal.
+    # This loop adds 5g at a time to the highest-calorie-density item that still
+    # has headroom under its slot maximum, until the calorie floor is met or no
+    # item can be increased without violating fat/carbs/protein ceilings.
+    cal_floor = user.cal_target * 0.97
+    for _ in range(60):   # max 60 × 5g = 300g added; enough for any gap
+        total_cal = _recompute(plan, "calories")
+        if total_cal >= cal_floor:
+            break
+
+        # Find the item with highest kcal/g that can be increased without
+        # pushing fat, carbs, or protein over their respective ceilings
+        best_meal, best_idx, best_density = None, None, 0.0
+        for m in MEALS:
+            for idx, it in enumerate(plan.get(m, [])):
+                j_ = it["food_idx"]
+                density = float(foods.loc[j_, "cal"])
+                if density <= best_density:
+                    continue
+                # Check whether adding 5g would breach any ceiling
+                delta_fat   = 5 * float(foods.loc[j_, "fat"])
+                delta_carbs = 5 * float(foods.loc[j_, "carbs"])
+                delta_prot  = 5 * float(foods.loc[j_, "prot"])
+                if (_recompute(plan, "fat")   + delta_fat   > user.fat_target   * 1.01 or
+                    _recompute(plan, "carbs") + delta_carbs > user.carbs_target * 1.01 or
+                    _recompute(plan, "protein") + delta_prot > user.protein_max * 1.01):
+                    continue
+                best_meal, best_idx, best_density = m, idx, density
+
+        if best_meal is None:
+            break   # no item can be increased without breaching a ceiling
+
+        it  = plan[best_meal][best_idx]
+        j_  = it["food_idx"]
+        ng  = it["grams"] + 5
+        it["grams"]     = ng
+        it["calories"]  = round(ng * foods.loc[j_, "cal"],       1)
+        it["protein"]   = round(ng * foods.loc[j_, "prot"],      1)
+        it["fat"]       = round(ng * foods.loc[j_, "fat"],       1)
+        it["sat_fat"]   = round(ng * foods.loc[j_, "sat_fat"],   1)
+        it["carbs"]     = round(ng * foods.loc[j_, "carbs"],     1)
+        it["fiber"]     = round(ng * foods.loc[j_, "fiber"],     1)
+        it["net_carbs"] = round(ng * foods.loc[j_, "net_carbs"], 1)
+        it["cost"]      = round(ng * foods.loc[j_, "cost"],      2)
+    # ─────────────────────────────────────────────────────────────────────────
     # ─────────────────────────────────────────────────────────────────────────
 
     return plan, sol
@@ -806,20 +859,28 @@ def day_totals(plan):
 
 
 def plan_violates(plan, user):
-    """True if the rounded plan misses macro targets beyond acceptance tolerance."""
+    """
+    True if the rounded plan misses any macro target.
+
+    FIX-2: All checks now use the shared ROUNDING_TOL constant (1 %) so
+    validation and the LP post-processor (_trim_for) agree exactly.
+    Previous code mixed hardcoded 0.95/1.01 literals inconsistently.
+    """
     if plan is None:
         return True
-    t   = day_totals(plan)
-    tol = NUTRITION_TOL
+    t = day_totals(plan)
+    tol = ROUNDING_TOL
     violates = (
-        t["protein"] < user.protein_target * tol["protein_lo"]
-        or t["protein"] > user.protein_max  * 1.01          # 1% rounding room above ceiling
-        or t["fiber"]  < user.fiber_target  * tol["fiber_lo"]
-        or t["fiber"]  > user.fiber_max     * 1.01
-        or t["fat"]    > user.fat_target    * 1.01          # 1% rounding room (max ~1g on 102g)
-        or t["carbs"]  > user.carbs_target  * 1.01
+        t["calories"] < user.cal_target * 0.97
+        or t["calories"] > user.cal_target * 1.03
+        or t["protein"] < user.protein_target * (1 - tol)
+        or t["protein"] > user.protein_max  * (1 + tol)
+        or t["fiber"]  < user.fiber_target  * (1 - tol)
+        or t["fiber"]  > user.fiber_max     * (1 + tol)
+        or t["fat"]    > user.fat_target    * (1 + tol)
+        or t["carbs"]  > user.carbs_target  * (1 + tol)
     )
-    if user.nc_max_day is not None and t["net_carbs"] > user.nc_max_day * 1.01:
+    if user.nc_max_day is not None and t["net_carbs"] > user.nc_max_day * (1 + tol):
         violates = True
     return violates
 
@@ -895,21 +956,46 @@ def get_banned_families(family_counts, n_days_remaining):
     return banned
 
 
+def _partial_excluded(excluded, keep_last_n=2):
+    """
+    FIX-5: Partial C21 relaxation — keep only the most recently banned food
+    per slot (up to keep_last_n entries) instead of the full accumulation.
+
+    When later days become infeasible because too many foods are banned across
+    tracked slots, this intermediate relaxation clears old bans while keeping
+    very recent ones (to preserve at least some cross-day variety). It sits
+    between full-exclusions and no-exclusions in the retry ladder.
+    """
+    partial = {}
+    for key, banned_set in excluded.items():
+        # Keep only the last keep_last_n items added (sets are unordered,
+        # so we use the size heuristic: if ≤ keep_last_n items, keep all)
+        if len(banned_set) <= keep_last_n:
+            partial[key] = set(banned_set)
+        else:
+            # Convert to list and keep last keep_last_n (arbitrary but consistent)
+            partial[key] = set(list(banned_set)[-keep_last_n:])
+    return partial
+
+
 def _day_solve_attempts(master_seed, day, excluded, banned_families):
     """
     Progressive relaxation ladder (§5.8 relaxation note):
-      1. Normal: C21 + perturbed cost + C6 (family bans)
-      2. No perturbation: C21 + C6, exact costs
-      3. Relaxed family: C21, no C6
-      4. No exclusions: neither C21 nor C6  (guaranteed feasible fallback)
+      1. Normal: C21 (full exclusions) + perturbed cost + C6 (family bans)
+      2. No perturbation: C21 (full) + C6, exact costs
+      3. Relaxed family: C21 (full), no C6
+      4. Partial exclusions: C21 (last 2 bans only), no C6  [FIX-5: new step]
+      5. No exclusions: neither C21 nor C6  (guaranteed feasible fallback)
     slot_off shifts the RNG seed so δ_{s,d} remains consistent with the
     ladder position but differs from the primary attempt.
     """
+    partial_excl = _partial_excluded(excluded, keep_last_n=2)
     return [
-        {"label": None,              "perturb": True,  "excluded": excluded,  "family_banned": banned_families, "slot_off": 0,    "solve_off": 0},
-        {"label": "no perturb",      "perturb": False, "excluded": excluded,  "family_banned": banned_families, "slot_off": 100,  "solve_off": 1},
-        {"label": "relaxed family",  "perturb": False, "excluded": excluded,  "family_banned": set(),           "slot_off": 1000, "solve_off": 2},
-        {"label": "no exclusions",   "perturb": False, "excluded": {},        "family_banned": set(),           "slot_off": 2000, "solve_off": 3},
+        {"label": None,                 "perturb": True,  "excluded": excluded,      "family_banned": banned_families, "slot_off": 0,    "solve_off": 0},
+        {"label": "no perturb",         "perturb": False, "excluded": excluded,      "family_banned": banned_families, "slot_off": 100,  "solve_off": 1},
+        {"label": "relaxed family",     "perturb": False, "excluded": excluded,      "family_banned": set(),           "slot_off": 1000, "solve_off": 2},
+        {"label": "partial exclusions", "perturb": False, "excluded": partial_excl,  "family_banned": set(),           "slot_off": 1500, "solve_off": 3},  # FIX-5
+        {"label": "no exclusions",      "perturb": False, "excluded": {},            "family_banned": set(),           "slot_off": 2000, "solve_off": 4},
     ]
 
 
@@ -1061,21 +1147,21 @@ def print_day(day_num, plan, sol, user):
 
     print()
     for name, ok, detail in [
-        ("Calories",   abs(cal_d) <= 200,
-         f"{cal_d:+.0f} kcal"),
-        ("Protein >=", totals["protein"] >= user.protein_target * 0.95,
+        ("Calories",   user.cal_target * 0.97 <= totals["calories"] <= user.cal_target * 1.03,
+         f"{totals['calories']:.0f} kcal  ({cal_d:+.0f},  band [{user.cal_target*0.97:.0f}–{user.cal_target*1.03:.0f}])"),
+        ("Protein >=", totals["protein"] >= user.protein_target * (1 - ROUNDING_TOL),
          f"{totals['protein']:.1f}/{user.protein_target} g <= {user.protein_max} g" ),
-        ("Protein <=", totals["protein"] <= user.protein_max * 1.01,
+        ("Protein <=", totals["protein"] <= user.protein_max * (1 + ROUNDING_TOL),
          f"{totals['protein']:.1f}/{user.protein_max} g"),
-        ("Fat <=",     totals["fat"] <= user.fat_target * 1.01,
+        ("Fat <=",     totals["fat"] <= user.fat_target * (1 + ROUNDING_TOL),
          f"{totals['fat']:.1f}/{user.fat_target} g"),
-        ("Carbs <=",   totals["carbs"] <= user.carbs_target * 1.01,
+        ("Carbs <=",   totals["carbs"] <= user.carbs_target * (1 + ROUNDING_TOL),
          f"{totals['carbs']:.1f}/{user.carbs_target} g"),
-        ("Fiber >=",   totals["fiber"] >= user.fiber_target * 0.95,
+        ("Fiber >=",   totals["fiber"] >= user.fiber_target * (1 - ROUNDING_TOL),
          f"{totals['fiber']:.1f}/{user.fiber_target} g <= {user.fiber_max} g"),
-        ("Fiber <=",   totals["fiber"] <= user.fiber_max * 1.01,
+        ("Fiber <=",   totals["fiber"] <= user.fiber_max * (1 + ROUNDING_TOL),
          f"{totals['fiber']:.1f}/{user.fiber_max} g"),
-        *([("Net carbs <=", totals["net_carbs"] <= user.nc_max_day * 1.01,
+        *([("Net carbs <=", totals["net_carbs"] <= user.nc_max_day * (1 + ROUNDING_TOL),
             f"{totals['net_carbs']:.1f}/{user.nc_max_day} g")]
           if user.nc_max_day else []),
     ]:

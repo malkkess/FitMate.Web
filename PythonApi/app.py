@@ -10,7 +10,7 @@ from fastapi import FastAPI
 
 BASE_DIR = Path(__file__).resolve().parent
 MODEL_PATH = Path(os.getenv("FITMATE_MODEL_PATH", BASE_DIR / "optimizer_model.py"))
-XLSX_PATH = Path(os.getenv("FITMATE_FOOD_XLSX", BASE_DIR / "Food_Data_GP_v3_.xlsx"))
+XLSX_PATH = Path(os.getenv("FITMATE_FOOD_XLSX", BASE_DIR / "Food_Data_GP_v3_modified.xlsx"))
 
 
 def _load_optimizer_module():
@@ -146,6 +146,50 @@ def _map_plan(plan: dict[str, list[dict[str, Any]]]) -> dict[str, list[dict[str,
     }
 
 
+def _solve_days(
+    user,
+    foods,
+    start_day: int,
+    days: int,
+    master_seed: int,
+    excluded: dict[tuple[str, int], set[int]],
+) -> list[dict[str, Any]]:
+    family_counts: dict[str, int] = {}
+    day_results: list[dict[str, Any]] = []
+
+    for offset in range(days):
+        model_day = start_day + offset
+        days_remaining = days - offset - 1
+        banned_families = optimizer.get_banned_families(family_counts, days_remaining)
+
+        plan, solver_status, relaxation = optimizer.solve_day_robust(
+            user=user,
+            foods=foods,
+            day=model_day,
+            master_seed=master_seed,
+            excluded=excluded,
+            banned_families=banned_families,
+        )
+
+        valid = plan is not None and not optimizer.plan_violates(plan, user)
+        day_results.append(
+            {
+                "dayNumber": model_day,
+                "success": valid,
+                "status": solver_status,
+                "plan": _map_plan(plan) if valid else None,
+                "relaxationApplied": relaxation is not None,
+                "relaxedConstraints": [relaxation] if relaxation else [],
+            }
+        )
+
+        if valid:
+            excluded = optimizer.build_exclusions(plan, excluded, foods, banned_families)
+            family_counts = optimizer.update_family_counts(plan, family_counts)
+
+    return day_results
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {
@@ -166,33 +210,47 @@ def optimize(payload: dict[str, Any]) -> dict[str, Any]:
         if master_seed is None:
             master_seed = int(optimizer.time.time() * 1000) % 100000
 
-        day_number = int(_get(payload, "dayNumber", 1) or 1)
-        plan, solver_status, relaxation = optimizer.solve_day_robust(
+        start_day = int(_get(payload, "dayNumber", 1) or 1)
+        days = max(1, int(_get(payload, "days", 1) or 1))
+        day_results = _solve_days(
             user=user,
             foods=foods,
-            day=day_number,
+            start_day=start_day,
+            days=days,
             master_seed=int(master_seed),
             excluded=excluded,
-            banned_families=set(),
         )
 
-    if plan is None or optimizer.plan_violates(plan, user):
+    first_valid = next((day for day in day_results if day["success"]), None)
+    all_success = all(day["success"] for day in day_results)
+
+    if first_valid is None:
         return {
             "success": False,
             "analysis": _analysis(user),
             "plan": None,
-            "status": solver_status,
+            "plans": day_results,
+            "status": day_results[-1]["status"] if day_results else "Infeasible",
             "message": "Optimizer could not generate a feasible meal plan.",
-            "relaxationApplied": relaxation is not None,
-            "relaxedConstraints": [relaxation] if relaxation else [],
+            "relaxationApplied": any(day["relaxationApplied"] for day in day_results),
+            "relaxedConstraints": [
+                constraint
+                for day in day_results
+                for constraint in day["relaxedConstraints"]
+            ],
         }
 
     return {
         "success": True,
         "analysis": _analysis(user),
-        "plan": _map_plan(plan),
-        "status": solver_status,
-        "message": "Meal plan generated successfully.",
-        "relaxationApplied": relaxation is not None,
-        "relaxedConstraints": [relaxation] if relaxation else [],
+        "plan": first_valid["plan"],
+        "plans": day_results,
+        "status": "Optimal" if all_success else "Partially generated",
+        "message": "Meal plan generated successfully." if all_success else "Some days could not be generated.",
+        "relaxationApplied": any(day["relaxationApplied"] for day in day_results),
+        "relaxedConstraints": [
+            constraint
+            for day in day_results
+            for constraint in day["relaxedConstraints"]
+        ],
     }

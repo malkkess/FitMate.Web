@@ -184,6 +184,14 @@ namespace Service
                 monthlyRepo.Update(existing);
             }
 
+            var user = await _uow.GetRepository<User, int>().GetByIdAsync(userId);
+            if (user is not null)
+            {
+                user.CurrentWeight = monthlyWeightDto.WeightKg;
+                user.UpdatedAt = DateTime.UtcNow;
+                _uow.GetRepository<User, int>().Update(user);
+            }
+
             await _uow.SaveChangesAsync();
         }
 
@@ -211,6 +219,7 @@ namespace Service
 
             var committedDays = logs.Count(l => l.CompletedWorkout || l.SleepHours > 0 || l.WaterIntakeLiters > 0);
             var commitmentScore = Math.Round((committedDays / 7.0) * 100, 2);
+            var shouldGenerateNewPlan = await ShouldGenerateNewPlanAsync(userId);
 
             return new WeeklyProgressSummaryDto
             {
@@ -220,8 +229,34 @@ namespace Service
                 AverageSleepHours = Math.Round(avgSleep, 2),
                 AverageWaterIntakeLiters = Math.Round(avgWater, 2),
                 CommitmentScore = commitmentScore,
+                ShouldGenerateNewPlan = shouldGenerateNewPlan,
+                PlanRecommendationMessage = shouldGenerateNewPlan
+                    ? "Your weight changed. Generate a new plan."
+                    : null,
                 DailyProgress = weeklyLogs,
             };
+        }
+
+        private async Task<bool> ShouldGenerateNewPlanAsync(int userId)
+        {
+            var latestWeightLog = (await _uow.GetRepository<MonthlyWeightLog, int>().GetAllAsync())
+                .Where(l => l.UserId == userId)
+                .OrderByDescending(l => l.UpdatedAt ?? l.CreatedAt)
+                .FirstOrDefault();
+
+            if (latestWeightLog is null)
+                return false;
+
+            var latestPlan = (await _uow.GetRepository<MealPlan, int>().GetAllAsync())
+                .Where(p => p.UserId == userId)
+                .OrderByDescending(p => p.CreatedAt)
+                .FirstOrDefault();
+
+            if (latestPlan is null)
+                return true;
+
+            var weightUpdatedAt = latestWeightLog.UpdatedAt ?? latestWeightLog.CreatedAt;
+            return weightUpdatedAt > latestPlan.CreatedAt;
         }
 
         private async Task<Dictionary<int, FoodItem>> LoadFoodsForIngredientsAsync(

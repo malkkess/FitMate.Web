@@ -14,6 +14,8 @@ namespace Shared.DataTransferObject
         public double AverageSleepHours { get; set; }
         public double AverageWaterIntakeLiters { get; set; }
         public double CommitmentScore { get; set; }
+        public bool ShouldGenerateNewPlan { get; set; }
+        public string? PlanRecommendationMessage { get; set; }
         public List<DailyProgressPointDto> DailyProgress { get; set; } = new();
     }
 

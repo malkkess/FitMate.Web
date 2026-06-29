@@ -16,6 +16,6 @@ http://localhost:8001/optimize
 The wrapper uses:
 
 - `optimizer_model.py`
-- `Food_Data_GP_v3_.xlsx`
+- `Food_Data_GP_v3_modified.xlsx`
 
 You can override paths with `FITMATE_MODEL_PATH` and `FITMATE_FOOD_XLSX`.

@@ -52,10 +52,15 @@ namespace FitMate.Web.Controllers
         }
 
         [HttpPost("monthly-weight")]
-        public async Task<IActionResult> LogMonthlyWeight(int userId, [FromBody] MonthlyWeightLogDto monthlyWeightDto)
+        public async Task<ActionResult<MessageResponseDto>> LogMonthlyWeight(
+            int userId,
+            [FromBody] MonthlyWeightLogDto monthlyWeightDto)
         {
             await _dailyLogService.LogMonthlyWeightAsync(userId, monthlyWeightDto);
-            return Ok();
+            return Ok(new MessageResponseDto
+            {
+                Message = "Weight updated. Generate a new plan.",
+            });
         }
 
         [HttpGet("weekly-summary")]
