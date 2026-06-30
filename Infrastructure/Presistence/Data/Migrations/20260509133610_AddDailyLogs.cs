@@ -73,13 +73,6 @@ namespace Presistence.Data.Migrations
                 type: "datetime2",
                 nullable: true);
 
-            migrationBuilder.AddColumn<int>(
-                name: "UserId1",
-                table: "HealthProfiles",
-                type: "int",
-                nullable: false,
-                defaultValue: 0);
-
             migrationBuilder.AlterColumn<int>(
                 name: "IsSnack",
                 table: "FoodItems",
@@ -165,38 +158,17 @@ namespace Presistence.Data.Migrations
                 });
 
             migrationBuilder.CreateIndex(
-                name: "IX_HealthProfiles_UserId1",
-                table: "HealthProfiles",
-                column: "UserId1");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_DailyLogs_UserId_LogDate",
                 table: "DailyLogs",
                 columns: new[] { "UserId", "LogDate" },
                 unique: true);
-
-            migrationBuilder.AddForeignKey(
-                name: "FK_HealthProfiles_Users_UserId1",
-                table: "HealthProfiles",
-                column: "UserId1",
-                principalTable: "Users",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropForeignKey(
-                name: "FK_HealthProfiles_Users_UserId1",
-                table: "HealthProfiles");
-
             migrationBuilder.DropTable(
                 name: "DailyLogs");
-
-            migrationBuilder.DropIndex(
-                name: "IX_HealthProfiles_UserId1",
-                table: "HealthProfiles");
 
             migrationBuilder.DropColumn(
                 name: "TotalCalories",
@@ -233,10 +205,6 @@ namespace Presistence.Data.Migrations
             migrationBuilder.DropColumn(
                 name: "UpdatedAt",
                 table: "MealIngredients");
-
-            migrationBuilder.DropColumn(
-                name: "UserId1",
-                table: "HealthProfiles");
 
             migrationBuilder.AlterColumn<bool>(
                 name: "IsSnack",
