@@ -31,8 +31,15 @@ namespace FitMate.Web.Controllers
             int userId,
             [FromBody] UpdateUserProfileDto updateDto)
         {
-            var profile = await _userService.UpdateProfileAsync(userId, updateDto);
-            return Ok(profile);
+            try
+            {
+                var profile = await _userService.UpdateProfileAsync(userId, updateDto);
+                return Ok(profile);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new MessageResponseDto { Message = ex.Message });
+            }
         }
 
         [HttpPatch("{userId:int}")]
@@ -40,8 +47,15 @@ namespace FitMate.Web.Controllers
             int userId,
             [FromBody] PartialUpdateUserProfileDto updateDto)
         {
-            var profile = await _userService.PatchProfileAsync(userId, updateDto);
-            return Ok(profile);
+            try
+            {
+                var profile = await _userService.PatchProfileAsync(userId, updateDto);
+                return Ok(profile);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new MessageResponseDto { Message = ex.Message });
+            }
         }
     }
 }

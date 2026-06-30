@@ -9,7 +9,7 @@ namespace Service
 {
     public class MealPlanService : IMealPlanService
     {
-        private const int GeneratedPlanDays = 7;
+        private const int GeneratedPlanDays = 6;
 
         private readonly IUnitOfWork _uow;
         private readonly IPythonLinker _pythonLinker;
@@ -33,13 +33,42 @@ namespace Service
             var user = await _uow.GetRepository<User, int>().GetByIdAsync(userId)
                        ?? throw new Exception($"User {userId} not found");
 
+            var today = DateTime.Today;
+            var allUserPlans = (await _uow.GetRepository<MealPlan, int>().GetAllAsync())
+                .Where(p => p.UserId == userId && !p.IsDeleted)
+                .ToList();
+
+            var latestPlan = allUserPlans
+                .OrderByDescending(p => p.CreatedAt)
+                .FirstOrDefault();
+
+            var latestMonthlyWeight = await GetLatestMonthlyWeightAsync(userId);
+            var hasNewMonthlyWeight = latestPlan is not null
+                && latestMonthlyWeight is not null
+                && (latestMonthlyWeight.UpdatedAt ?? latestMonthlyWeight.CreatedAt) > latestPlan.CreatedAt;
+
+            var activePlanEndDate = allUserPlans
+                .Where(p => p.Date.Date >= today)
+                .Select(p => (DateTime?)p.Date.Date)
+                .Max();
+
+            if (activePlanEndDate is not null && !hasNewMonthlyWeight)
+            {
+                throw new InvalidOperationException(
+                    $"You already have an active plan until {activePlanEndDate.Value:dd MMMM yyyy}. Generate a new plan after it ends.");
+            }
+
+            if (hasNewMonthlyWeight)
+            {
+                SoftDeletePlansFromDate(allUserPlans, today);
+            }
+
             var health = await GetHealthProfileAsync(userId);
             var adherence = await _dailyLogService.GetAdherenceContextAsync(userId);
             var optimizerState = await GetOptimizerStateAsync(userId);
             var slotExclusions = await BuildSlotExclusionsAsync(userId);
 
-            var existingPlanCount = (await _uow.GetRepository<MealPlan, int>().GetAllAsync())
-                .Count(p => p.UserId == userId);
+            var existingPlanCount = allUserPlans.Count(p => p.Date.Date < today);
 
             var masterSeed = OptimizerContextBuilder.ResolveMasterSeed(optimizerState);
             var dayNumber = OptimizerContextBuilder.ResolveDayNumber(optimizerState, existingPlanCount);
@@ -71,11 +100,10 @@ namespace Service
             };
 
             var generatedPlans = ResolveGeneratedPlans(pythonResult, dayNumber);
-            if (generatedPlans.Count == 0)
+            if (generatedPlans.Count != GeneratedPlanDays)
                 return null;
 
             var savedPlans = new List<(MealPlan Plan, Dictionary<string, List<PythonMealItemDto>> PythonPlan)>();
-            var today = DateTime.Today;
 
             foreach (var generatedPlan in generatedPlans)
             {
@@ -130,6 +158,18 @@ namespace Service
             return MapToDto(firstPlan.Plan, firstPlan.PythonPlan, pythonResult.Analysis);
         }
 
+        private void SoftDeletePlansFromDate(IEnumerable<MealPlan> plans, DateTime fromDate)
+        {
+            var repo = _uow.GetRepository<MealPlan, int>();
+
+            foreach (var plan in plans.Where(p => p.Date.Date >= fromDate.Date))
+            {
+                plan.IsDeleted = true;
+                plan.UpdatedAt = DateTime.UtcNow;
+                repo.Update(plan);
+            }
+        }
+
         private static List<(int DayNumber, Dictionary<string, List<PythonMealItemDto>> Plan)> ResolveGeneratedPlans(
             PythonOutputDto pythonResult,
             int fallbackDayNumber)
@@ -180,7 +220,7 @@ namespace Service
             var cutoff = DateTime.UtcNow.Date.AddDays(-OptimizerContextBuilder.ExclusionLookbackDays);
 
             var plans = (await _uow.GetRepository<MealPlan, int>().GetAllAsync())
-                .Where(p => p.UserId == userId && p.Date.Date >= cutoff)
+                .Where(p => p.UserId == userId && !p.IsDeleted && p.Date.Date >= cutoff)
                 .OrderByDescending(p => p.Date)
                 .ToList();
 
@@ -199,6 +239,15 @@ namespace Service
         {
             var states = await _uow.GetRepository<UserOptimizerState, int>().GetAllAsync();
             return states.FirstOrDefault(s => s.UserId == userId);
+        }
+
+        private async Task<MonthlyWeightLog?> GetLatestMonthlyWeightAsync(int userId)
+        {
+            var logs = await _uow.GetRepository<MonthlyWeightLog, int>().GetAllAsync();
+            return logs
+                .Where(l => l.UserId == userId && !l.IsDeleted)
+                .OrderByDescending(l => l.UpdatedAt ?? l.CreatedAt)
+                .FirstOrDefault();
         }
 
         private async Task<HealthProfile?> GetHealthProfileAsync(int userId)

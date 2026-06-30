@@ -27,6 +27,7 @@ namespace Presistence.Data
         public DbSet<MealIngredient> MealIngredients { get; set; }
         public DbSet<DailyLog> DailyLogs { get; set; }
         public DbSet<MonthlyWeightLog> MonthlyWeightLogs { get; set; }
+        public DbSet<ProgressWeightLog> ProgressWeightLogs { get; set; }
         public DbSet<MealAdherenceLog> MealAdherenceLogs { get; set; }
         public DbSet<MealAdherenceItem> MealAdherenceItems { get; set; }
         public DbSet<PasswordResetCode> PasswordResetCodes { get; set; }

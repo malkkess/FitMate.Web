@@ -1,6 +1,6 @@
 # FitMate Python Optimizer API
 
-Run the Python optimizer service before generating a meal plan from the .NET backend.
+Run the Python optimizer service before generating a 6-day meal plan from the .NET backend.
 
 ```powershell
 cd C:\Users\hp\source\repos\FitMate.Web\PythonApi

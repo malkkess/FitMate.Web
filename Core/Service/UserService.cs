@@ -25,6 +25,16 @@ namespace Service
 
         public async Task<UserProfileDto> UpdateProfileAsync(int userId, UpdateUserProfileDto updateDto)
         {
+            InputValidation.ValidateProfile(
+                updateDto.FullName,
+                updateDto.Age,
+                updateDto.Height,
+                updateDto.Weight,
+                updateDto.Gender,
+                updateDto.ActivityLevel,
+                updateDto.Goal,
+                updateDto.DiabetesStatus);
+
             var user = await GetUserOrThrowAsync(userId);
             var health = await GetHealthProfileAsync(userId)
                          ?? throw new Exception($"Health profile for user {userId} not found");
@@ -49,6 +59,8 @@ namespace Service
 
         public async Task<UserProfileDto> PatchProfileAsync(int userId, PartialUpdateUserProfileDto updateDto)
         {
+            InputValidation.ValidatePartialProfile(updateDto);
+
             var user = await GetUserOrThrowAsync(userId);
             var health = await GetHealthProfileAsync(userId)
                          ?? throw new Exception($"Health profile for user {userId} not found");
