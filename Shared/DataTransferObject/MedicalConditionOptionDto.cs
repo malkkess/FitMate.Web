@@ -5,6 +5,7 @@ namespace Shared.DataTransferObject
         public string Value { get; set; } = string.Empty;
         public string Label { get; set; } = string.Empty;
         public string InputType { get; set; } = string.Empty;
+        public string? OptimizerValue { get; set; }
         public List<LookupOptionDto> Options { get; set; } = new();
     }
 }
