@@ -243,15 +243,10 @@ namespace Presistence.Data.Migrations
                     b.Property<int>("UserId")
                         .HasColumnType("int");
 
-                    b.Property<int>("UserId1")
-                        .HasColumnType("int");
-
                     b.HasKey("Id");
 
                     b.HasIndex("UserId")
                         .IsUnique();
-
-                    b.HasIndex("UserId1");
 
                     b.ToTable("HealthProfiles");
                 });
@@ -735,15 +730,9 @@ namespace Presistence.Data.Migrations
 
             modelBuilder.Entity("DomainLayer.Models.HealthProfile", b =>
                 {
-                    b.HasOne("DomainLayer.Models.User", null)
+                    b.HasOne("DomainLayer.Models.User", "User")
                         .WithOne("HealthProfile")
                         .HasForeignKey("DomainLayer.Models.HealthProfile", "UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("DomainLayer.Models.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId1")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 

@@ -19,7 +19,7 @@ namespace Presistence.Data.Configs
             builder.HasIndex(u => u.Email).IsUnique(); // Ensure email uniqueness
 
             builder.HasOne(u => u.HealthProfile)
-                   .WithOne() // No navigation property on HealthProfile
+                   .WithOne(hp => hp.User)
                    .HasForeignKey<HealthProfile>(hp => hp.UserId)
                    .OnDelete(DeleteBehavior.Cascade);
         }
