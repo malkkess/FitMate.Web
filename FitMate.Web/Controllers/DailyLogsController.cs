@@ -20,10 +20,19 @@ namespace FitMate.Web.Controllers
         }
 
         [HttpPost]
-        public async Task<IActionResult> LogActivity(int userId, [FromBody] DailyLogActivityDto activityDto)
+        public async Task<ActionResult<MessageResponseDto>> LogActivity(
+            int userId,
+            [FromBody] DailyLogActivityDto activityDto)
         {
-            await _dailyLogService.LogActivityAsync(userId, activityDto);
-            return Ok();
+            try
+            {
+                await _dailyLogService.LogActivityAsync(userId, activityDto);
+                return Ok(new MessageResponseDto { Message = "Daily activity logged." });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new MessageResponseDto { Message = ex.Message });
+            }
         }
 
         [HttpPost("meal-adherence")]
@@ -38,7 +47,7 @@ namespace FitMate.Web.Controllers
             }
             catch (InvalidOperationException ex)
             {
-                return BadRequest(ex.Message);
+                return BadRequest(new MessageResponseDto { Message = ex.Message });
             }
         }
 
@@ -47,8 +56,15 @@ namespace FitMate.Web.Controllers
             int userId,
             [FromQuery] DateTime? logDate = null)
         {
-            var result = await _dailyLogService.GetMealAdherenceAsync(userId, logDate);
-            return result is null ? NotFound() : Ok(result);
+            try
+            {
+                var result = await _dailyLogService.GetMealAdherenceAsync(userId, logDate);
+                return result is null ? NotFound() : Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new MessageResponseDto { Message = ex.Message });
+            }
         }
 
         [HttpPost("monthly-weight")]
@@ -56,11 +72,37 @@ namespace FitMate.Web.Controllers
             int userId,
             [FromBody] MonthlyWeightLogDto monthlyWeightDto)
         {
-            await _dailyLogService.LogMonthlyWeightAsync(userId, monthlyWeightDto);
-            return Ok(new MessageResponseDto
+            try
             {
-                Message = "Weight updated. Generate a new plan.",
-            });
+                await _dailyLogService.LogMonthlyWeightAsync(userId, monthlyWeightDto);
+                return Ok(new MessageResponseDto
+                {
+                    Message = "Weight updated. Generate a new plan.",
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new MessageResponseDto { Message = ex.Message });
+            }
+        }
+
+        [HttpPost("progress-weight")]
+        public async Task<ActionResult<MessageResponseDto>> LogProgressWeight(
+            int userId,
+            [FromBody] ProgressWeightLogDto progressWeightDto)
+        {
+            try
+            {
+                await _dailyLogService.LogProgressWeightAsync(userId, progressWeightDto);
+                return Ok(new MessageResponseDto
+                {
+                    Message = "Progress weight logged.",
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new MessageResponseDto { Message = ex.Message });
+            }
         }
 
         [HttpGet("weekly-summary")]

@@ -29,6 +29,7 @@ namespace DomainLayer.Models
         public virtual ICollection<MealPlan> MealPlans { get; set; } = new List<MealPlan>();
         public virtual ICollection<DailyLog> DailyLogs { get; set; } = new List<DailyLog>();
         public virtual ICollection<MonthlyWeightLog> MonthlyWeightLogs { get; set; } = new List<MonthlyWeightLog>();
+        public virtual ICollection<ProgressWeightLog> ProgressWeightLogs { get; set; } = new List<ProgressWeightLog>();
         public virtual ICollection<MealAdherenceLog> MealAdherenceLogs { get; set; } = new List<MealAdherenceLog>();
     }
 }

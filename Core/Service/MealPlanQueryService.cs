@@ -16,10 +16,10 @@ namespace Service
 
         public async Task<DailyMealPlanDto?> GetTodayPlanAsync(int userId)
         {
-            var today = DateTime.UtcNow.Date;
+            var today = DateTime.Today;
             var plans = await _uow.GetRepository<MealPlan, int>().GetAllAsync();
             var plan = plans
-                .Where(p => p.UserId == userId && p.Date.Date == today)
+                .Where(p => p.UserId == userId && !p.IsDeleted && p.Date.Date == today)
                 .OrderByDescending(p => p.CreatedAt)
                 .FirstOrDefault();
 
@@ -29,7 +29,7 @@ namespace Service
         public async Task<DailyMealPlanDto?> GetPlanByIdAsync(int userId, int planId)
         {
             var plan = await _uow.GetRepository<MealPlan, int>().GetByIdAsync(planId);
-            if (plan is null || plan.UserId != userId)
+            if (plan is null || plan.UserId != userId || plan.IsDeleted)
             {
                 return null;
             }
@@ -40,7 +40,7 @@ namespace Service
         public async Task<IReadOnlyList<MealPlanSummaryDto>> GetUserPlansAsync(int userId)
         {
             var plans = (await _uow.GetRepository<MealPlan, int>().GetAllAsync())
-                .Where(p => p.UserId == userId)
+                .Where(p => p.UserId == userId && !p.IsDeleted)
                 .OrderByDescending(p => p.Date)
                 .ToList();
 
@@ -66,20 +66,43 @@ namespace Service
 
             return plans.Select(plan =>
             {
-                var planMealIds = meals
+                var planMeals = meals
                     .Where(m => m.MealPlanId == plan.Id)
-                    .Select(m => m.Id)
-                    .ToHashSet();
+                    .OrderBy(m => m.Type)
+                    .ToList();
 
-                var totalCalories = ingredients
+                var planMealIds = planMeals.Select(m => m.Id).ToHashSet();
+                var planIngredients = ingredients
                     .Where(i => planMealIds.Contains(i.MealId))
-                    .Sum(i => MapIngredient(i, foods[i.FoodItemId], new Dictionary<int, bool>()).Calories);
+                    .ToList();
+
+                var totalCalories = planIngredients
+                    .Sum(i => MapIngredient(i, foods[i.FoodItemId]).Calories);
 
                 return new MealPlanSummaryDto
                 {
                     PlanId = plan.Id,
                     Date = plan.Date,
                     TotalDayCalories = Math.Round(totalCalories, 2),
+                    Meals = planMeals.Select(meal =>
+                    {
+                        var mealIngredients = planIngredients
+                            .Where(i => i.MealId == meal.Id)
+                            .ToList();
+
+                        return new MealPlanSummaryMealDto
+                        {
+                            MealId = meal.Id,
+                            MealType = meal.Type.ToString(),
+                            TotalCalories = Math.Round(
+                                mealIngredients.Sum(i => MapIngredient(i, foods[i.FoodItemId]).Calories),
+                                2),
+                            FoodItems = mealIngredients
+                                .Where(i => foods.ContainsKey(i.FoodItemId))
+                                .Select(i => foods[i.FoodItemId].Name)
+                                .ToList(),
+                        };
+                    }).ToList(),
                 };
             }).ToList();
         }
@@ -101,13 +124,11 @@ namespace Service
                 .Where(f => foodIds.Contains(f.Id))
                 .ToDictionary(f => f.Id);
 
-            var adherenceItems = await LoadAdherenceItemsAsync(plan.UserId, plan.Date, ingredients);
-
             var mealDtos = meals.Select(meal =>
             {
                 var ingredientDtos = ingredients
                     .Where(i => i.MealId == meal.Id)
-                    .Select(i => MapIngredient(i, foods[i.FoodItemId], adherenceItems))
+                    .Select(i => MapIngredient(i, foods[i.FoodItemId]))
                     .ToList();
 
                 return new MealDto
@@ -133,25 +154,9 @@ namespace Service
             };
         }
 
-        private async Task<Dictionary<int, bool>> LoadAdherenceItemsAsync(
-            int userId,
-            DateTime planDate,
-            IEnumerable<MealIngredient> ingredients)
-        {
-            var logs = await _uow.GetRepository<MealAdherenceLog, int>().GetAllAsync();
-            var log = logs.FirstOrDefault(l => l.UserId == userId && l.LogDate.Date == planDate.Date);
-            if (log is null) return new Dictionary<int, bool>();
-
-            var items = await _uow.GetRepository<MealAdherenceItem, int>().GetAllAsync();
-            return items
-                .Where(i => i.MealAdherenceLogId == log.Id)
-                .ToDictionary(i => i.MealIngredientId, i => i.IsEaten);
-        }
-
         private static MealIngredientDto MapIngredient(
             MealIngredient ingredient,
-            FoodItem food,
-            IReadOnlyDictionary<int, bool> adherenceItems)
+            FoodItem food)
         {
             var factor = ingredient.Quantity / 100.0;
 
@@ -165,7 +170,7 @@ namespace Service
                 Fats = ingredient.Fats > 0 ? ingredient.Fats : food.Fats * factor,
                 Carbs = ingredient.Carbs > 0 ? ingredient.Carbs : food.Carbs * factor,
                 Fibers = food.Fiber * factor,
-                IsEaten = adherenceItems.GetValueOrDefault(ingredient.Id, false),
+                IsEaten = false,
             };
         }
     }

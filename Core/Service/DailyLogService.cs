@@ -17,6 +17,8 @@ namespace Service
 
         public async Task LogActivityAsync(int userId, DailyLogActivityDto activityDto)
         {
+            InputValidation.ValidateDailyActivity(activityDto);
+
             var logDate = (activityDto.LogDate ?? DateTime.UtcNow).Date;
             var logRepo = _uow.GetRepository<DailyLog, int>();
             var logs = await logRepo.GetAllAsync();
@@ -53,6 +55,8 @@ namespace Service
             int userId,
             MealAdherenceRequestDto request)
         {
+            InputValidation.ValidateMealAdherence(request);
+
             var logDate = (request.LogDate ?? DateTime.UtcNow).Date;
 
             var plan = await _uow.GetRepository<MealPlan, int>().GetByIdAsync(request.MealPlanId)
@@ -137,6 +141,8 @@ namespace Service
 
         public async Task<MealAdherenceResponseDto?> GetMealAdherenceAsync(int userId, DateTime? logDate = null)
         {
+            InputValidation.ValidateLogDate(logDate);
+
             var date = (logDate ?? DateTime.UtcNow).Date;
             var allLogs = await _uow.GetRepository<MealAdherenceLog, int>().GetAllAsync();
             var log = allLogs.FirstOrDefault(l => l.UserId == userId && l.LogDate.Date == date);
@@ -156,8 +162,38 @@ namespace Service
             return AdherenceContextBuilder.Build(logs);
         }
 
+        public async Task LogProgressWeightAsync(int userId, ProgressWeightLogDto progressWeightDto)
+        {
+            InputValidation.ValidateProgressWeight(progressWeightDto);
+
+            var logDate = (progressWeightDto.LogDate ?? DateTime.UtcNow).Date;
+            var repo = _uow.GetRepository<ProgressWeightLog, int>();
+            var logs = await repo.GetAllAsync();
+            var existing = logs.FirstOrDefault(x => x.UserId == userId && x.LogDate.Date == logDate);
+
+            if (existing is null)
+            {
+                await repo.AddAsync(new ProgressWeightLog
+                {
+                    UserId = userId,
+                    LogDate = logDate,
+                    WeightKg = progressWeightDto.WeightKg,
+                });
+            }
+            else
+            {
+                existing.WeightKg = progressWeightDto.WeightKg;
+                existing.UpdatedAt = DateTime.UtcNow;
+                repo.Update(existing);
+            }
+
+            await _uow.SaveChangesAsync();
+        }
+
         public async Task LogMonthlyWeightAsync(int userId, MonthlyWeightLogDto monthlyWeightDto)
         {
+            InputValidation.ValidateMonthlyWeight(monthlyWeightDto);
+
             var now = DateTime.UtcNow;
             var year = monthlyWeightDto.Year ?? now.Year;
             var month = monthlyWeightDto.Month ?? now.Month;
@@ -214,6 +250,23 @@ namespace Service
                 CompletedWorkout = l.CompletedWorkout,
             }).ToList();
 
+            var weightLogs = (await _uow.GetRepository<ProgressWeightLog, int>().GetAllAsync())
+                .Where(l => l.UserId == userId && l.LogDate.Date >= startDate && l.LogDate.Date <= endDate)
+                .OrderBy(l => l.LogDate)
+                .ToList();
+
+            var weightProgress = weightLogs.Select(l => new WeightProgressPointDto
+            {
+                LogDate = l.LogDate,
+                WeightKg = l.WeightKg,
+            }).ToList();
+
+            var latestProgressWeight = (await _uow.GetRepository<ProgressWeightLog, int>().GetAllAsync())
+                .Where(l => l.UserId == userId)
+                .OrderByDescending(l => l.LogDate)
+                .ThenByDescending(l => l.UpdatedAt ?? l.CreatedAt)
+                .FirstOrDefault();
+
             var avgSleep = logs.Count == 0 ? 0 : logs.Average(l => l.SleepHours);
             var avgWater = logs.Count == 0 ? 0 : logs.Average(l => l.WaterIntakeLiters);
 
@@ -233,7 +286,9 @@ namespace Service
                 PlanRecommendationMessage = shouldGenerateNewPlan
                     ? "Your weight changed. Generate a new plan."
                     : null,
+                LatestProgressWeightKg = latestProgressWeight?.WeightKg,
                 DailyProgress = weeklyLogs,
+                WeightProgress = weightProgress,
             };
         }
 
@@ -248,7 +303,7 @@ namespace Service
                 return false;
 
             var latestPlan = (await _uow.GetRepository<MealPlan, int>().GetAllAsync())
-                .Where(p => p.UserId == userId)
+                .Where(p => p.UserId == userId && !p.IsDeleted)
                 .OrderByDescending(p => p.CreatedAt)
                 .FirstOrDefault();
 

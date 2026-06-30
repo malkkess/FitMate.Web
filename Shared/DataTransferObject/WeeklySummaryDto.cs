@@ -16,7 +16,9 @@ namespace Shared.DataTransferObject
         public double CommitmentScore { get; set; }
         public bool ShouldGenerateNewPlan { get; set; }
         public string? PlanRecommendationMessage { get; set; }
+        public double? LatestProgressWeightKg { get; set; }
         public List<DailyProgressPointDto> DailyProgress { get; set; } = new();
+        public List<WeightProgressPointDto> WeightProgress { get; set; } = new();
     }
 
     public class DailyProgressPointDto
@@ -26,5 +28,11 @@ namespace Shared.DataTransferObject
         public double WaterIntakeLiters { get; set; }
         public int MoodScore { get; set; }
         public bool CompletedWorkout { get; set; }
+    }
+
+    public class WeightProgressPointDto
+    {
+        public DateTime LogDate { get; set; }
+        public double WeightKg { get; set; }
     }
 }

@@ -24,13 +24,18 @@ namespace FitMate.Web.Controllers
         }
 
         [HttpGet("today")]
+        [ProducesResponseType(typeof(DailyMealPlanDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(MessageResponseDto), StatusCodes.Status404NotFound)]
         public async Task<ActionResult<DailyMealPlanDto>> GetTodayPlan(int userId)
         {
             var plan = await _mealPlanQueryService.GetTodayPlanAsync(userId);
-            return plan is null ? NotFound() : Ok(plan);
+            return plan is null
+                ? NotFound(new MessageResponseDto { Message = "No plan for today. Generate a new plan." })
+                : Ok(plan);
         }
 
         [HttpGet("{planId:int}")]
+        [ApiExplorerSettings(IgnoreApi = true)]
         public async Task<ActionResult<DailyMealPlanDto>> GetPlanById(int userId, int planId)
         {
             var plan = await _mealPlanQueryService.GetPlanByIdAsync(userId, planId);
@@ -38,6 +43,7 @@ namespace FitMate.Web.Controllers
         }
 
         [HttpGet]
+        [ProducesResponseType(typeof(IReadOnlyList<MealPlanSummaryDto>), StatusCodes.Status200OK)]
         public async Task<ActionResult<IReadOnlyList<MealPlanSummaryDto>>> GetUserPlans(int userId)
         {
             var plans = await _mealPlanQueryService.GetUserPlansAsync(userId);
@@ -47,8 +53,17 @@ namespace FitMate.Web.Controllers
         [HttpPost("generate")]
         public async Task<ActionResult<DailyMealPlanDto>> GeneratePlan(int userId)
         {
-            var plan = await _mealPlanService.GeneratePlanAsync(userId);
-            return plan is null ? BadRequest("Failed to generate meal plan.") : Ok(plan);
+            try
+            {
+                var plan = await _mealPlanService.GeneratePlanAsync(userId);
+                return plan is null
+                    ? BadRequest(new MessageResponseDto { Message = "Failed to generate meal plan." })
+                    : Ok(plan);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new MessageResponseDto { Message = ex.Message });
+            }
         }
     }
 }

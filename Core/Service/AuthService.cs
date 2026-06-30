@@ -203,9 +203,6 @@ namespace Service
 
         private static void ValidateRegistration(RegisterRequestDto request)
         {
-            if (string.IsNullOrWhiteSpace(request.FullName))
-                throw new InvalidOperationException("Full name is required.");
-
             if (string.IsNullOrWhiteSpace(request.Email))
                 throw new InvalidOperationException("Email is required.");
 
@@ -215,23 +212,15 @@ namespace Service
             if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < MinPasswordLength)
                 throw new InvalidOperationException($"Password must be at least {MinPasswordLength} characters.");
 
-            if (request.Age < 13 || request.Age > 120)
-                throw new InvalidOperationException("Age must be between 13 and 120.");
-
-            if (request.Height <= 0 || request.Weight <= 0)
-                throw new InvalidOperationException("Height and weight must be greater than zero.");
-
-            if (!Enum.IsDefined(typeof(Gender), request.Gender))
-                throw new InvalidOperationException("Invalid gender value.");
-
-            if (!Enum.IsDefined(typeof(ActivityLevel), request.ActivityLevel))
-                throw new InvalidOperationException("Invalid activity level value.");
-
-            if (!Enum.IsDefined(typeof(Goal), request.Goal))
-                throw new InvalidOperationException("Invalid goal value.");
-
-            if (!Enum.IsDefined(typeof(DiabetesStatus), request.DiabetesStatus))
-                throw new InvalidOperationException("Invalid diabetes status value.");
+            InputValidation.ValidateProfile(
+                request.FullName,
+                request.Age,
+                request.Height,
+                request.Weight,
+                request.Gender,
+                request.ActivityLevel,
+                request.Goal,
+                request.DiabetesStatus);
         }
 
         private static void ValidateResetPassword(ResetPasswordRequestDto request)

@@ -578,6 +578,41 @@ namespace Presistence.Data.Migrations
                     b.ToTable("PasswordResetCodes");
                 });
 
+            modelBuilder.Entity("DomainLayer.Models.ProgressWeightLog", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("LogDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.Property<double>("WeightKg")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("float(18)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "LogDate")
+                        .IsUnique();
+
+                    b.ToTable("ProgressWeightLogs");
+                });
+
             modelBuilder.Entity("DomainLayer.Models.User", b =>
                 {
                     b.Property<int>("Id")
@@ -829,6 +864,17 @@ namespace Presistence.Data.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("DomainLayer.Models.ProgressWeightLog", b =>
+                {
+                    b.HasOne("DomainLayer.Models.User", "User")
+                        .WithMany("ProgressWeightLogs")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("DomainLayer.Models.UserOptimizerState", b =>
                 {
                     b.HasOne("DomainLayer.Models.User", "User")
@@ -893,6 +939,8 @@ namespace Presistence.Data.Migrations
                     b.Navigation("MealPlans");
 
                     b.Navigation("MonthlyWeightLogs");
+
+                    b.Navigation("ProgressWeightLogs");
 
                     b.Navigation("Preferences");
                 });
