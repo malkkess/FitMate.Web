@@ -12,26 +12,13 @@ namespace FitMate.Web.Controllers
         {
             return Ok(new ProfileOptionsDto
             {
-                DiabetesStatuses = new List<LookupOptionDto>
-                {
-                    Option("none", "None"),
-                    Option("prediabetic", "Prediabetic"),
-                    Option("type2", "Type 2 Diabetes"),
-                },
                 MedicalConditions = new List<MedicalConditionOptionDto>
                 {
-                    MedicalCondition(
-                        "diabetesStatus",
-                        "Diabetes",
-                        "select",
-                        new List<LookupOptionDto>
-                        {
-                            Option("none", "None"),
-                            Option("prediabetic", "Prediabetic"),
-                            Option("type2", "Type 2 Diabetes"),
-                        }),
-                    MedicalCondition("hypertension", "Hypertension", "checkbox"),
-                    MedicalCondition("heart_disease", "Heart Disease", "checkbox"),
+                    MedicalCondition("none", "None", "select"),
+                    MedicalCondition("prediabetic", "Prediabetic", "select", optimizerValue: "prediabetic"),
+                    MedicalCondition("type2", "Type 2 Diabetes", "select", optimizerValue: "type2"),
+                    MedicalCondition("hypertension", "Hypertension", "select"),
+                    MedicalCondition("heart_disease", "Heart Disease", "select"),
                 },
                 Allergies = new List<LookupOptionDto>
                 {
@@ -75,13 +62,15 @@ namespace FitMate.Web.Controllers
             string value,
             string label,
             string inputType,
-            List<LookupOptionDto>? options = null)
+            List<LookupOptionDto>? options = null,
+            string? optimizerValue = null)
         {
             return new MedicalConditionOptionDto
             {
                 Value = value,
                 Label = label,
                 InputType = inputType,
+                OptimizerValue = optimizerValue,
                 Options = options ?? new List<LookupOptionDto>(),
             };
         }
