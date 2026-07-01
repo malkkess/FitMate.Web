@@ -29,13 +29,15 @@ namespace Presistence.Data.Migrations
                 name: "HasDiabetes",
                 table: "HealthProfiles");
 
-            migrationBuilder.AlterColumn<int>(
+            migrationBuilder.DropColumn(
+                name: "Id",
+                table: "MealIngredients");
+
+            migrationBuilder.AddColumn<int>(
                 name: "Id",
                 table: "MealIngredients",
                 type: "int",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "int")
+                nullable: false)
                 .Annotation("SqlServer:Identity", "1, 1");
 
             migrationBuilder.AddColumn<string>(
@@ -188,14 +190,16 @@ namespace Presistence.Data.Migrations
                 name: "FoodFamily",
                 table: "FoodItems");
 
-            migrationBuilder.AlterColumn<int>(
+            migrationBuilder.DropColumn(
+                name: "Id",
+                table: "MealIngredients");
+
+            migrationBuilder.AddColumn<int>(
                 name: "Id",
                 table: "MealIngredients",
                 type: "int",
                 nullable: false,
-                oldClrType: typeof(int),
-                oldType: "int")
-                .OldAnnotation("SqlServer:Identity", "1, 1");
+                defaultValue: 0);
 
             migrationBuilder.AddColumn<bool>(
                 name: "HasDiabetes",
